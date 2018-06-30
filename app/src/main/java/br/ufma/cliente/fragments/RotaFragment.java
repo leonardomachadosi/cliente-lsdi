@@ -1,12 +1,17 @@
 package br.ufma.cliente.fragments;
 
+import android.Manifest;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
+import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.Fragment;
+import android.util.Log;
 import android.view.LayoutInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Toast;
@@ -27,17 +32,43 @@ import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.PolylineOptions;
+import com.google.gson.Gson;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
 import java.util.List;
 
 import br.ufma.cliente.R;
 import br.ufma.cliente.activity.MainActivity;
+import br.ufma.cliente.domain.enuns.StatusEnum;
+import br.ufma.cliente.domain.model.Localizacao;
+import br.ufma.cliente.domain.model.Status;
+import br.ufma.cliente.domain.model.Trajeto;
 import br.ufma.cliente.domain.model.UsuarioLocalizacao;
+import br.ufma.cliente.retrofit.RetrofitInicializador;
+import br.ufma.cliente.util.DateUtil;
 import br.ufma.lsdi.cddl.CDDL;
+import br.ufma.lsdi.cddl.Callback;
+import br.ufma.lsdi.cddl.Monitor;
 import br.ufma.lsdi.cddl.Publisher;
 import br.ufma.lsdi.cddl.Subscriber;
+import br.ufma.lsdi.cddl.message.CommandRequest;
+import br.ufma.lsdi.cddl.message.ContextMessage;
+import br.ufma.lsdi.cddl.message.MOUUID;
+import br.ufma.lsdi.cddl.message.MapEvent;
+import br.ufma.lsdi.cddl.message.MonitorToken;
+import br.ufma.lsdi.cddl.message.SensorData;
+import br.ufma.lsdi.cddl.message.ServiceList;
+import br.ufma.lsdi.cddl.message.TechnologyID;
+import br.ufma.lsdi.cddl.type.CDDLConfig;
+import br.ufma.lsdi.cddl.type.CEPRule;
+import br.ufma.lsdi.cddl.type.ClientId;
+import br.ufma.lsdi.cddl.type.Host;
+import br.ufma.lsdi.cddl.type.Topic;
 import butterknife.ButterKnife;
+import retrofit2.Call;
+import retrofit2.Response;
 
 /**
  * Created by Leeo on 04/04/2017.
@@ -51,6 +82,7 @@ public class RotaFragment extends SupportMapFragment implements OnMapReadyCallba
     private GoogleMap mMap;
     private LatLng origem, destino;
     private static final String GOOGLE_KEY_DIRECTIONS = "AIzaSyB299emCUuKMkZHXIHQc5u1Po7ZnrEA3S0";
+    Gson gson;
 
     private final CDDL cddl = CDDL.getInstance();
     private final String clientId = "ivan.rodrigues@lsdi.ufma.br";
@@ -61,6 +93,10 @@ public class RotaFragment extends SupportMapFragment implements OnMapReadyCallba
     private final String PREFS_PRIVATE = "PREFS_PRIVATE";
     private SharedPreferences sharedPreferences;
     private UsuarioLocalizacao usuarioLocalizacao;
+
+    private Localizacao localizacao;
+
+    private CDDLConfig config;
 
     public static RotaFragment newInstance(String param1, String param2) {
         RotaFragment fragment = new RotaFragment();
@@ -79,8 +115,50 @@ public class RotaFragment extends SupportMapFragment implements OnMapReadyCallba
         super.onCreate(savedInstanceState);
         context = getActivity();
         Bundle bundle = getArguments();
+        localizacao = new Localizacao();
         usuarioLocalizacao = (UsuarioLocalizacao) bundle.getSerializable("usuarioLocalizacao");
         getMapAsync(this);
+        changeTitleItemMenu("Iniciar");
+        MainActivity.menuItem.setOnMenuItemClickListener(new MenuItem.OnMenuItemClickListener() {
+            @Override
+            public boolean onMenuItemClick(MenuItem item) {
+
+                if (usuarioLocalizacao.getStatus().getId().equals(StatusEnum.AGUARDANDO_INICIO.getValue())) {
+                    subscrever();
+                    changeTitleItemMenu("Finalizar");
+                    Toast.makeText(getActivity(), "Iniciando", Toast.LENGTH_SHORT).show();
+                } else {
+                    stopSensor();
+                    Toast.makeText(getActivity(), "Parando", Toast.LENGTH_SHORT).show();
+                    MainActivity.menuItem.setVisible(false);
+                }
+
+             /*   UsuarioLocalizacao newUsuarioLocalizacao = new UsuarioLocalizacao();
+                Trajeto trajeto = usuarioLocalizacao.getTrajeto();
+                newUsuarioLocalizacao.setLocalizacao(localizacao);
+                newUsuarioLocalizacao.setUsuario(usuarioLocalizacao.getTrajeto().getUsuario());
+                newUsuarioLocalizacao.setData(localizacao.getData());
+
+                if (usuarioLocalizacao.getStatus().getId().equals(StatusEnum.AGUARDANDO_INICIO.getValue())) {
+                    trajeto.setLatitudeInicial(localizacao.getLatitude());
+                    trajeto.setLongitudeInicial(localizacao.getLongitude());
+                    newUsuarioLocalizacao.setStatus(new Status(StatusEnum.ANDANDO.getValue()));
+                } else {
+                    //TODO alterar para finalizado
+                    newUsuarioLocalizacao.setStatus(new Status(StatusEnum.PARADO.getValue()));
+                }
+                newUsuarioLocalizacao.setTrajeto(trajeto);
+                // rota(newUsuarioLocalizacao);
+                try {
+                    sendNewLocation(newUsuarioLocalizacao);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+
+                */
+                return false;
+            }
+        });
     }
 
 
@@ -100,6 +178,234 @@ public class RotaFragment extends SupportMapFragment implements OnMapReadyCallba
         }
     }
 
+    @Override
+    public void onResume() {
+        super.onResume();
+
+        MainActivity.toolbar.setTitle("Trajeto");
+        //iniciar CDDL
+        iniciarCDDL(getActivity());
+
+        //mostrando sensores internos
+        mostrarSensores();
+
+        String topic = "ivan.rodrigues@lsdi.ufma.br/Location";
+        //publicar dado de contexto
+
+        //iniciar sensores
+        sensorList = Arrays.asList("Location", "BMI160 Accelerometer");
+        //  sensorList = Arrays.asList("K2HH Acceleration");
+        startSensores(sensorList);
+
+        //
+        subDois(topic);
+    }
+
+    //iniciando CDDL
+    public void iniciarCDDL(Context context) {
+
+        config = CDDLConfig.builder()
+                //.host(Host.of("tcp://lsdi.ufma.br:1883"))
+                .host(Host.of("tcp://192.168.100.4:1883"))
+                //.host(Host.of("tcp://localhost:1883"))
+                .clientId(ClientId.of(clientId))
+                .build();
+
+        cddl.init(context, config);
+        cddl.startScan();
+
+    }
+
+    //publica em um tópico
+    private void startSensores(List<String> sensorList) {
+
+        CommandRequest comandRequest = new CommandRequest(clientId,
+                new MOUUID(TechnologyID.INTERNAL.id, "localhost"),
+                "start-sensors", sensorList);
+
+        pub = Publisher.of(cddl);
+        pub.setCallback(new Callback() {
+            @Override
+            public void onPublishFailure(Throwable cause) {
+                Log.d("PUBLISHER", "Falha ao publicar");
+            }
+
+            @Override
+            public void onConnectSuccess() {
+                pub.publish(comandRequest);
+                //pub.publish(queryMessage);
+                Log.d("PUBLISHER", "publicado");
+            }
+
+            @Override
+            public void onConnectFailure(Throwable exception) {
+                Log.d("PUBLISHER", "Falha ao conectar");
+            }
+        });
+        pub.connect();
+    }
+
+    private void mostrarSensores() {
+        List<String> sensors = cddl.getInternalSensorList();
+
+        for (String sen : sensors) {
+            Log.d("Sensors", sen);
+        }
+    }
+
+    //subscreve em um topico
+    public void subscrever() {
+        //String sql = "select * from ContextMessage";
+        String epl = "select avg(sensorValue[0]*sensorValue[0]+sensorValue[1]*sensorValue[1]+sensorValue[2]*sensorValue[2]) as valor1 " +
+                "from ContextMessage.win:time_batch(2sec) " +
+                "where serviceName = 'BMI160 Accelerometer'";
+        sub = Subscriber.of(cddl);
+        Monitor monitor = Monitor.of(config);
+
+        MonitorToken token = monitor.addRule(CEPRule.of(epl));
+
+        sub = Subscriber.of(cddl);
+        sub.setCallback(new Callback() {
+            @Override
+            public void messageArrived(MapEvent mapEvent) {
+
+                Object val1 = (Double) mapEvent.getProperties().get("valor1");
+
+                Log.d("Monitor", gson.toJson(val1));
+
+            }
+
+            @Override
+            public void messageArrived(ContextMessage contextMessage) {
+                Log.d("Monitor", gson.toJson(contextMessage));
+            }
+
+            @Override
+            public void onConnectSuccess() {
+                sub.subscribe(token);
+                Log.d("Sucess", "Conectado com sucesso");
+
+            }
+
+            @Override
+            public void onConnectFailure(Throwable exception) {
+                Log.d("Falha", "Erro ao conectar");
+            }
+
+            @Override
+            public void onSubscribeSuccess(Topic topic) {
+                Log.d("Subss", "Subescrito com sucesso");
+            }
+
+            @Override
+            public void onSubscribeFailure(Throwable cause) {
+                Log.d("Falha", "Erro ao subescrever");
+            }
+        });
+
+        sub.connect();
+    }
+
+    //iniciar e finalizar no servidor
+    private void sendNewLocation(UsuarioLocalizacao usuarioLocalizacao) throws Exception {
+        try {
+
+            Call<UsuarioLocalizacao> call = new RetrofitInicializador().salvarTrajeto().salvarTrajeto(usuarioLocalizacao);
+            call.enqueue(new retrofit2.Callback<UsuarioLocalizacao>() {
+                @Override
+                public void onResponse(Call<UsuarioLocalizacao> call, Response<UsuarioLocalizacao> response) {
+                    if (response.body() != null) {
+                        UsuarioLocalizacao user = new UsuarioLocalizacao();
+                        user = response.body();
+                        if (user.getId() != null) {
+                            if (user.getStatus().getId().equals(StatusEnum.ANDANDO.getValue())) {
+                                subscrever();
+                                changeTitleItemMenu("Finalizar");
+                                Toast.makeText(getActivity(), "Iniciando", Toast.LENGTH_SHORT).show();
+                            } else {
+                                stopSensor();
+                                Toast.makeText(getActivity(), "Finalizado", Toast.LENGTH_SHORT).show();
+                            }
+                        }
+                    }
+                }
+
+                @Override
+                public void onFailure(Call<UsuarioLocalizacao> call, Throwable t) {
+                    t.printStackTrace();
+                }
+            });
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void changeTitleItemMenu(String title) {
+        MainActivity.menuItem.setTitle(title);
+    }
+
+    public void stopSensor() {
+        if (cddl != null) cddl.stopScan();
+        if (pub != null) pub.disconnect();
+        if (sub != null) sub.disconnect();
+        super.onDestroy();
+    }
+
+    private void subDois(String topic) {
+
+        sub = Subscriber.of(cddl);
+        sub.setCallback(new Callback() {
+            @Override
+            public void messageArrived(ContextMessage contextMessage) {
+                Gson gson = new Gson();
+                Log.d("subscriber", gson.toJson(contextMessage));
+                SensorData sensorData = gson.fromJson(contextMessage.getBody(), SensorData.class);
+                if (sensorData.getSensorName().equals("Location")) {
+                    localizacao.setLatitude(sensorData.getSensorValue()[0]);
+                    localizacao.setLongitude(sensorData.getSensorValue()[1]);
+                    localizacao.setData(DateUtil.toDate(new Date(), DateUtil.DATA_SEPARADO_POR_TRACO_AMERICANO));
+                    origem = new LatLng(localizacao.getLatitude(), localizacao.getLongitude());
+                    if (ActivityCompat.checkSelfPermission(getActivity(), Manifest.permission.ACCESS_FINE_LOCATION)
+                            != PackageManager.PERMISSION_GRANTED &&
+                            ActivityCompat.checkSelfPermission(getActivity(), Manifest.permission.ACCESS_COARSE_LOCATION)
+                                    != PackageManager.PERMISSION_GRANTED) {
+                        return;
+                    }
+                    MainActivity.menuItem.setVisible(true);
+                    //mMap.setMyLocationEnabled(true);
+                }
+            }
+
+            @Override
+            public void onConnectSuccess() {
+                sub.subscribe(Topic.of(topic));
+                Log.d("subscriber", "Conectado com sucesso");
+            }
+
+            @Override
+            public void messageArrived(ServiceList serviceList) {
+                Log.d("Service List", gson.toJson(serviceList));
+            }
+
+            @Override
+            public void onConnectFailure(Throwable exception) {
+                Log.d("subscriber", "Falha ao Conectar");
+            }
+
+            @Override
+            public void onSubscribeSuccess(Topic topic) {
+                Log.d("subscriber", "Subscrito com sucesso");
+            }
+
+            @Override
+            public void onSubscribeFailure(Throwable cause) {
+                Log.d("subscriber", "Falha ao Subscrever");
+            }
+        });
+
+        sub.connect();
+
+    }
 
     private void rota(UsuarioLocalizacao usuarioLocalizacao) {
         GoogleDirection.withServerKey(GOOGLE_KEY_DIRECTIONS)

@@ -46,22 +46,21 @@
             android:windowSoftInputMode="stateHidden" />
         <activity
             android:name=".activity.CadastroActivity"
+            android:parentActivityName=".activity.LoginActivity"
             android:screenOrientation="portrait"
-            android:windowSoftInputMode="stateHidden"
-            android:parentActivityName=".activity.LoginActivity">
+            android:windowSoftInputMode="stateHidden">
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value=".activity.LoginActivity" />
         </activity>
         <activity
             android:name=".activity.TrajetoActivity"
-            android:windowSoftInputMode="stateHidden"
-            android:parentActivityName=".activity.MainActivity">
+            android:parentActivityName=".activity.MainActivity"
+            android:windowSoftInputMode="stateHidden">
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value=".activity.MainActivity" />
         </activity>
-
         <activity
             android:name=".activity.RotaActivity"
             android:label="@string/title_activity_rota"
@@ -70,17 +69,15 @@
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value=".activity.TrajetoActivity" />
         </activity>
-
         <activity
             android:name=".activity.MapsActivity"
             android:label="@string/title_activity_rota"
             android:parentActivityName=".activity.TrajetoActivity">
-
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value=".activity.TrajetoActivity" />
         </activity>
-
+        <activity android:name=".activity.TesteActivity"></activity>
     </application>
 
 </manifest>

@@ -48,11 +48,14 @@ import br.ufma.cliente.retrofit.RetrofitInicializador;
 import br.ufma.cliente.util.DateUtil;
 import br.ufma.lsdi.cddl.CDDL;
 import br.ufma.lsdi.cddl.Callback;
+import br.ufma.lsdi.cddl.Monitor;
 import br.ufma.lsdi.cddl.Publisher;
 import br.ufma.lsdi.cddl.Subscriber;
 import br.ufma.lsdi.cddl.message.CommandRequest;
 import br.ufma.lsdi.cddl.message.ContextMessage;
 import br.ufma.lsdi.cddl.message.MOUUID;
+import br.ufma.lsdi.cddl.message.MapEvent;
+import br.ufma.lsdi.cddl.message.MonitorToken;
 import br.ufma.lsdi.cddl.message.QueryMessage;
 import br.ufma.lsdi.cddl.message.QueryResponseMessage;
 import br.ufma.lsdi.cddl.message.SensorData;
@@ -60,6 +63,7 @@ import br.ufma.lsdi.cddl.message.ServiceList;
 import br.ufma.lsdi.cddl.message.ServiceMessage;
 import br.ufma.lsdi.cddl.message.TechnologyID;
 import br.ufma.lsdi.cddl.type.CDDLConfig;
+import br.ufma.lsdi.cddl.type.CEPRule;
 import br.ufma.lsdi.cddl.type.ClientId;
 import br.ufma.lsdi.cddl.type.Host;
 import br.ufma.lsdi.cddl.type.Topic;
@@ -91,14 +95,12 @@ public class MapsFragment extends SupportMapFragment implements OnMapReadyCallba
     private String topicEpl = "";
 
     QueryMessage queryMessage = null;
+    private CDDLConfig config;
     Gson gson;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        //queryMessage = new QueryMessage("select count(*) from ServiceMessage.win:time_batch(2 sec)");
-        queryMessage = new QueryMessage("select * from ServiceMessage");
-        topicEpl = queryMessage.getReturnCode();
         getMapAsync(this);
         localizacao = new Localizacao();
         ButterKnife.bind(getActivity());
@@ -148,6 +150,7 @@ public class MapsFragment extends SupportMapFragment implements OnMapReadyCallba
                     if (response.body() != null) {
                         UsuarioLocalizacao novoUsuarioLocalizacao = response.body();
                         if (novoUsuarioLocalizacao.getId() != null) {
+                            getActivity().onBackPressed();
                             changeFragment(new TrajetoFragment());
                         }
                     }
@@ -185,7 +188,7 @@ public class MapsFragment extends SupportMapFragment implements OnMapReadyCallba
 
 
         //iniciar sensores
-        sensorList = Arrays.asList("Location", "K2HH Acceleration");
+        sensorList = Arrays.asList("Location");
         //  sensorList = Arrays.asList("K2HH Acceleration");
         startSensores(sensorList);
     }
@@ -267,10 +270,10 @@ public class MapsFragment extends SupportMapFragment implements OnMapReadyCallba
     //iniciando CDDL
     public void iniciarCDDL(Context context) {
 
-        CDDLConfig config = CDDLConfig.builder()
+        config = CDDLConfig.builder()
                 //.host(Host.of("tcp://lsdi.ufma.br:1883"))
                 .host(Host.of("tcp://192.168.100.4:1883"))
-               // .host(Host.of("tcp://localhost:1883"))
+                //.host(Host.of("tcp://localhost:1883"))
                 .clientId(ClientId.of(clientId))
                 .build();
 
@@ -282,8 +285,6 @@ public class MapsFragment extends SupportMapFragment implements OnMapReadyCallba
     //subscreve em um topico
     public void subscrever(String topic) {
         sub = Subscriber.of(cddl);
-
-
         sub.setCallback(new Callback() {
             @Override
             public void messageArrived(ContextMessage contextMessage) {
@@ -291,11 +292,10 @@ public class MapsFragment extends SupportMapFragment implements OnMapReadyCallba
                 //Log.d("subscriber", gson.toJson(contextMessage));
                 SensorData sensorData = gson.fromJson(contextMessage.getBody(), SensorData.class);
                 Log.d("Location", gson.toJson(sensorData));
-               /* localizacao.setLatitude(sensorData.getSensorValue()[0]);
+                localizacao.setLatitude(sensorData.getSensorValue()[0]);
                 localizacao.setLongitude(sensorData.getSensorValue()[1]);
                 localizacao.setData(DateUtil.toDate(new Date(), DateUtil.DATA_SEPARADO_POR_TRACO_AMERICANO));
-                origem = new LatLng(localizacao.getLatitude(), localizacao.getLongitude());*/
-
+                origem = new LatLng(localizacao.getLatitude(), localizacao.getLongitude());
                 if (ActivityCompat.checkSelfPermission(getActivity(), Manifest.permission.ACCESS_FINE_LOCATION)
                         != PackageManager.PERMISSION_GRANTED &&
                         ActivityCompat.checkSelfPermission(getActivity(), Manifest.permission.ACCESS_COARSE_LOCATION)
@@ -309,19 +309,7 @@ public class MapsFragment extends SupportMapFragment implements OnMapReadyCallba
             @Override
             public void onConnectSuccess() {
                 sub.subscribe(Topic.of(topic));
-                sub.subscribe(Topic.of("query-response/"+topicEpl));
                 Log.d("subscriber", "Conectado com sucesso");
-            }
-
-            @Override
-            public void messageArrived(QueryResponseMessage response) {
-
-                Log.d("Fluxo", gson.toJson(response));
-                List<ServiceMessage> list = response.getServiceMessages();
-                for (ServiceMessage message:
-                     list) {
-                    Log.d("Message", gson.toJson(message));
-                }
             }
 
             @Override
@@ -375,7 +363,7 @@ public class MapsFragment extends SupportMapFragment implements OnMapReadyCallba
             @Override
             public void onConnectSuccess() {
                 pub.publish(comandRequest);
-                pub.publish(queryMessage);
+                //pub.publish(queryMessage);
                 Log.d("PUBLISHER", "publicado");
             }
 

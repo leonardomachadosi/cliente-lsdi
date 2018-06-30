@@ -135,7 +135,8 @@ public class MainActivity extends AppCompatActivity
                 changeFragment(new TrajetoFragment());
                 break;
             case R.id.nav_map:
-                changeFragment(new MapsFragment());
+                //changeFragment(new MapsFragment());
+                startActivity(new Intent(this, TesteActivity.class));
                 break;
             case R.id.nav_sair:
                 logout();
