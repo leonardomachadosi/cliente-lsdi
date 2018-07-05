@@ -4,32 +4,27 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
-import android.support.design.widget.FloatingActionButton;
-import android.support.design.widget.Snackbar;
+import android.support.design.widget.NavigationView;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentTransaction;
-import android.text.TextUtils;
-import android.view.View;
-import android.support.design.widget.NavigationView;
 import android.support.v4.view.GravityCompat;
 import android.support.v4.widget.DrawerLayout;
 import android.support.v7.app.ActionBarDrawerToggle;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
+import android.text.TextUtils;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.View;
 import android.widget.TextView;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import br.ufma.cliente.domain.model.Pessoa;
+import br.ufma.cliente.R;
 import br.ufma.cliente.domain.model.Usuario;
 import br.ufma.cliente.fragments.MapsFragment;
-import br.ufma.cliente.R;
-import br.ufma.cliente.fragments.RotaFragment;
 import br.ufma.cliente.fragments.TrajetoFragment;
-import butterknife.BindView;
 
 public class MainActivity extends AppCompatActivity
         implements NavigationView.OnNavigationItemSelectedListener {
@@ -40,7 +35,6 @@ public class MainActivity extends AppCompatActivity
     private SharedPreferences sharedPreferences;
 
     private Usuario usuario;
-    private Pessoa pessoa;
     public static MenuItem menuItem;
 
 
@@ -135,8 +129,8 @@ public class MainActivity extends AppCompatActivity
                 changeFragment(new TrajetoFragment());
                 break;
             case R.id.nav_map:
-                //changeFragment(new MapsFragment());
-                startActivity(new Intent(this, TesteActivity.class));
+                changeFragment(new MapsFragment());
+                // startActivity(new Intent(this, TesteActivity.class));
                 break;
             case R.id.nav_sair:
                 logout();
@@ -171,7 +165,6 @@ public class MainActivity extends AppCompatActivity
         startActivity(new Intent(getApplicationContext(), LoginActivity.class));
         finish();
     }
-
 
 
 }

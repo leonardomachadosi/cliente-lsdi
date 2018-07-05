@@ -76,7 +76,7 @@ import retrofit2.Response;
  * Created by Leeo on 04/04/2017.
  */
 
-public class RotaFragment extends SupportMapFragment implements OnMapReadyCallback {
+public class RotaFragment extends Fragment implements OnMapReadyCallback {
     private static final String ARG_PARAM1 = "param1";
     private static final String ARG_PARAM2 = "param2";
     public Context context;
@@ -114,6 +114,15 @@ public class RotaFragment extends SupportMapFragment implements OnMapReadyCallba
     public RotaFragment() {
     }
 
+    @Nullable
+    @Override
+    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        View view = inflater.inflate(R.layout.fragment_rota, container, false);
+        SupportMapFragment mapFragment = (SupportMapFragment) getChildFragmentManager().findFragmentById(R.id.rota);
+        mapFragment.getMapAsync(this);
+        return view;
+    }
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -122,7 +131,6 @@ public class RotaFragment extends SupportMapFragment implements OnMapReadyCallba
         localizacao = new Localizacao();
         localizacaoAnterior = new Localizacao();
         usuarioLocalizacao = (UsuarioLocalizacao) bundle.getSerializable("usuarioLocalizacao");
-        getMapAsync(this);
         changeTitleItemMenu("Iniciar");
         MainActivity.menuItem.setOnMenuItemClickListener(new MenuItem.OnMenuItemClickListener() {
             @Override
@@ -180,8 +188,8 @@ public class RotaFragment extends SupportMapFragment implements OnMapReadyCallba
     public void iniciarCDDL(Context context) {
 
         config = CDDLConfig.builder()
-                //.host(Host.of("tcp://lsdi.ufma.br:1883"))
-                .host(Host.of("tcp://iot.eclipse.org:1883"))
+                .host(Host.of("tcp://lsdi.ufma.br:1883"))
+                //.host(Host.of("tcp://iot.eclipse.org:1883"))
                 //.host(Host.of("tcp://localhost:1883"))
                 .clientId(ClientId.of(clientId))
                 .build();
@@ -293,18 +301,36 @@ public class RotaFragment extends SupportMapFragment implements OnMapReadyCallba
 
     private void publicarCustom(UsuarioLocalizacao usuarioLocalizacao) {
 
-        ContextMessage contextMessage =
-                new ContextMessage("UsuarioLocalizacao", "UsuarioLocalizacao", gson.toJson(usuarioLocalizacao));
+        try {
+            publicador = Publisher.of(cddl);
+            gson = new Gson();
 
-        publicador = Publisher.of(cddl);
-        publicador.setCallback(new Callback() {
-            @Override
-            public void onConnectSuccess() {
-                publicador.publish(contextMessage);
-            }
-        });
+            ContextMessage contextMessage =
+                    new ContextMessage("String", "UsuarioLocalizacao",
+                            gson.toJson(usuarioLocalizacao));
 
-        publicador.connect();
+            publicador.setCallback(new Callback() {
+                @Override
+                public void onConnectSuccess() {
+                    publicador.publish(contextMessage);
+                    Log.d("Publicador", "Publicado com Sucesso!");
+                }
+
+                @Override
+                public void onConnectFailure(Throwable exception) {
+                    Log.d("Publicador", exception.getMessage());
+                }
+
+                @Override
+                public void onPublishFailure(Throwable cause) {
+                    Log.d("Publicador", cause.getMessage());
+                }
+            });
+
+            publicador.connect();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
 
     }
 
@@ -368,11 +394,7 @@ public class RotaFragment extends SupportMapFragment implements OnMapReadyCallba
     }
 
     public void stopSensor() {
-        if (cddl != null) cddl.stopScan();
-        if (pub != null) pub.disconnect();
-        if (sub != null) sub.disconnect();
-        if (subscriber != null) subscriber.disconnect();
-        super.onDestroy();
+
     }
 
     private void subDois(String topic) {
@@ -479,6 +501,18 @@ public class RotaFragment extends SupportMapFragment implements OnMapReadyCallba
                     }
                 });
 
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        stopSensor();
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        stopSensor();
     }
 
     private void setCameraWithCoordinationBounds(Route route) {

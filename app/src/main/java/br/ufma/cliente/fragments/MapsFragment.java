@@ -6,11 +6,15 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.support.annotation.Nullable;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentTransaction;
 import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.MenuItem;
+import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Toast;
 
 import com.akexorcist.googledirection.DirectionCallback;
@@ -48,31 +52,24 @@ import br.ufma.cliente.retrofit.RetrofitInicializador;
 import br.ufma.cliente.util.DateUtil;
 import br.ufma.lsdi.cddl.CDDL;
 import br.ufma.lsdi.cddl.Callback;
-import br.ufma.lsdi.cddl.Monitor;
 import br.ufma.lsdi.cddl.Publisher;
 import br.ufma.lsdi.cddl.Subscriber;
 import br.ufma.lsdi.cddl.message.CommandRequest;
 import br.ufma.lsdi.cddl.message.ContextMessage;
 import br.ufma.lsdi.cddl.message.MOUUID;
-import br.ufma.lsdi.cddl.message.MapEvent;
-import br.ufma.lsdi.cddl.message.MonitorToken;
 import br.ufma.lsdi.cddl.message.QueryMessage;
-import br.ufma.lsdi.cddl.message.QueryResponseMessage;
 import br.ufma.lsdi.cddl.message.SensorData;
 import br.ufma.lsdi.cddl.message.ServiceList;
-import br.ufma.lsdi.cddl.message.ServiceMessage;
 import br.ufma.lsdi.cddl.message.TechnologyID;
 import br.ufma.lsdi.cddl.type.CDDLConfig;
-import br.ufma.lsdi.cddl.type.CEPRule;
 import br.ufma.lsdi.cddl.type.ClientId;
 import br.ufma.lsdi.cddl.type.Host;
 import br.ufma.lsdi.cddl.type.Topic;
 import butterknife.ButterKnife;
 import retrofit2.Call;
 import retrofit2.Response;
-import retrofit2.converter.gson.GsonConverterFactory;
 
-public class MapsFragment extends SupportMapFragment implements OnMapReadyCallback, GoogleMap.OnMapLongClickListener {
+public class MapsFragment extends Fragment implements OnMapReadyCallback, GoogleMap.OnMapLongClickListener {
 
     private GoogleMap mMap;
     private LatLng origem, destino;
@@ -98,10 +95,19 @@ public class MapsFragment extends SupportMapFragment implements OnMapReadyCallba
     private CDDLConfig config;
     Gson gson;
 
+    @Nullable
+    @Override
+    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        // Inflate the layout for this fragment
+        View view = inflater.inflate(R.layout.fragment_maps, container, false);
+        SupportMapFragment mapFragment = (SupportMapFragment) getChildFragmentManager().findFragmentById(R.id.map);
+        mapFragment.getMapAsync(this);
+        return view;
+    }
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getMapAsync(this);
         localizacao = new Localizacao();
         ButterKnife.bind(getActivity());
         gson = new Gson();
@@ -112,6 +118,7 @@ public class MapsFragment extends SupportMapFragment implements OnMapReadyCallba
                 if (item.getItemId() == R.id.action_settings) {
 
                     try {
+                        stopSensor();
                         usuario = new Usuario();
                         Bundle bundle = getArguments();
                         usuario = (Usuario) bundle.getSerializable("usuario");
@@ -127,6 +134,7 @@ public class MapsFragment extends SupportMapFragment implements OnMapReadyCallba
 
                     } catch (Exception e) {
                         e.printStackTrace();
+                        stopSensor();
                     }
                 }
 
@@ -136,7 +144,6 @@ public class MapsFragment extends SupportMapFragment implements OnMapReadyCallba
     }
 
     private void salvarTrajeto(UsuarioLocalizacao usuarioLocalizacao) throws Exception {
-
         try {
 
             Gson gson = new Gson();
@@ -150,8 +157,9 @@ public class MapsFragment extends SupportMapFragment implements OnMapReadyCallba
                     if (response.body() != null) {
                         UsuarioLocalizacao novoUsuarioLocalizacao = response.body();
                         if (novoUsuarioLocalizacao.getId() != null) {
-                            getActivity().onBackPressed();
+                            mMap.clear();
                             changeFragment(new TrajetoFragment());
+                            Toast.makeText(getActivity().getApplicationContext(), "Trajeto Criado", Toast.LENGTH_LONG).show();
                         }
                     }
                 }
@@ -178,10 +186,6 @@ public class MapsFragment extends SupportMapFragment implements OnMapReadyCallba
         //mostrando sensores internos
         mostrarSensores();
 
-
-        //publicar dado de contexto
-        //publisherContext(new ContextMessage("String","location","São Luis"));
-
         //subscrever tópico
         subscrever("ivan.rodrigues@lsdi.ufma.br/Location");
         // subscreverAcellerometro("ivan.rodrigues@lsdi.ufma.br/BMI160 Accelerometer");
@@ -201,7 +205,7 @@ public class MapsFragment extends SupportMapFragment implements OnMapReadyCallba
         mMap.getUiSettings().setZoomControlsEnabled(true);
         // Add a marker in Sydney and move the camera
         //origem = new LatLng(-2.5497997, -44.2538819);
-        mMap.setMapType(GoogleMap.MAP_TYPE_SATELLITE);
+        mMap.setMapType(GoogleMap.MAP_TYPE_NORMAL);
 
 
     }
@@ -271,9 +275,7 @@ public class MapsFragment extends SupportMapFragment implements OnMapReadyCallba
     public void iniciarCDDL(Context context) {
 
         config = CDDLConfig.builder()
-                //.host(Host.of("tcp://lsdi.ufma.br:1883"))
-                .host(Host.of("tcp://192.168.100.4:1883"))
-                //.host(Host.of("tcp://localhost:1883"))
+                .host(Host.of("tcp://lsdi.ufma.br:1883"))
                 .clientId(ClientId.of(clientId))
                 .build();
 
@@ -296,10 +298,15 @@ public class MapsFragment extends SupportMapFragment implements OnMapReadyCallba
                 localizacao.setLongitude(sensorData.getSensorValue()[1]);
                 localizacao.setData(DateUtil.toDate(new Date(), DateUtil.DATA_SEPARADO_POR_TRACO_AMERICANO));
                 origem = new LatLng(localizacao.getLatitude(), localizacao.getLongitude());
-                if (ActivityCompat.checkSelfPermission(getActivity(), Manifest.permission.ACCESS_FINE_LOCATION)
-                        != PackageManager.PERMISSION_GRANTED &&
-                        ActivityCompat.checkSelfPermission(getActivity(), Manifest.permission.ACCESS_COARSE_LOCATION)
-                                != PackageManager.PERMISSION_GRANTED) {
+
+                if (ActivityCompat.checkSelfPermission(getActivity(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(getActivity(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                    // TODO: Consider calling
+                    //    ActivityCompat#requestPermissions
+                    // here to request the missing permissions, and then overriding
+                    //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                    //                                          int[] grantResults)
+                    // to handle the case where the user grants the permission. See the documentation
+                    // for ActivityCompat#requestPermissions for more details.
                     return;
                 }
 
@@ -383,14 +390,17 @@ public class MapsFragment extends SupportMapFragment implements OnMapReadyCallba
     }
 
     public void stopSensor() {
-        if (cddl != null) cddl.stopScan();
-        if (pub != null) pub.disconnect();
-        if (sub != null) sub.disconnect();
-        super.onDestroy();
+
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        mMap.clear();
+        stopSensor();
     }
 
     private void changeFragment(Fragment fragment) {
-        stopSensor();
         Bundle bundle = new Bundle();
         bundle.putSerializable("usuario", usuario);
         fragment.setArguments(bundle);
