@@ -36,6 +36,7 @@ import com.google.gson.Gson;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 
@@ -58,6 +59,7 @@ import br.ufma.lsdi.cddl.message.ContextMessage;
 import br.ufma.lsdi.cddl.message.MOUUID;
 import br.ufma.lsdi.cddl.message.MapEvent;
 import br.ufma.lsdi.cddl.message.MonitorToken;
+import br.ufma.lsdi.cddl.message.QueryResponseMessage;
 import br.ufma.lsdi.cddl.message.SensorData;
 import br.ufma.lsdi.cddl.message.ServiceList;
 import br.ufma.lsdi.cddl.message.TechnologyID;
@@ -86,15 +88,17 @@ public class RotaFragment extends SupportMapFragment implements OnMapReadyCallba
 
     private final CDDL cddl = CDDL.getInstance();
     private final String clientId = "ivan.rodrigues@lsdi.ufma.br";
-    private Subscriber sub;
-    private Publisher pub;
-    private List<String> sensorList;
+    private Subscriber sub, subscriber;
+    private Publisher pub, publicador;
 
     private final String PREFS_PRIVATE = "PREFS_PRIVATE";
     private SharedPreferences sharedPreferences;
     private UsuarioLocalizacao usuarioLocalizacao;
 
     private Localizacao localizacao;
+    private Localizacao localizacaoAnterior;
+
+    private String customTopic;
 
     private CDDLConfig config;
 
@@ -116,46 +120,13 @@ public class RotaFragment extends SupportMapFragment implements OnMapReadyCallba
         context = getActivity();
         Bundle bundle = getArguments();
         localizacao = new Localizacao();
+        localizacaoAnterior = new Localizacao();
         usuarioLocalizacao = (UsuarioLocalizacao) bundle.getSerializable("usuarioLocalizacao");
         getMapAsync(this);
         changeTitleItemMenu("Iniciar");
         MainActivity.menuItem.setOnMenuItemClickListener(new MenuItem.OnMenuItemClickListener() {
             @Override
             public boolean onMenuItemClick(MenuItem item) {
-
-                if (usuarioLocalizacao.getStatus().getId().equals(StatusEnum.AGUARDANDO_INICIO.getValue())) {
-                    subscrever();
-                    changeTitleItemMenu("Finalizar");
-                    Toast.makeText(getActivity(), "Iniciando", Toast.LENGTH_SHORT).show();
-                } else {
-                    stopSensor();
-                    Toast.makeText(getActivity(), "Parando", Toast.LENGTH_SHORT).show();
-                    MainActivity.menuItem.setVisible(false);
-                }
-
-             /*   UsuarioLocalizacao newUsuarioLocalizacao = new UsuarioLocalizacao();
-                Trajeto trajeto = usuarioLocalizacao.getTrajeto();
-                newUsuarioLocalizacao.setLocalizacao(localizacao);
-                newUsuarioLocalizacao.setUsuario(usuarioLocalizacao.getTrajeto().getUsuario());
-                newUsuarioLocalizacao.setData(localizacao.getData());
-
-                if (usuarioLocalizacao.getStatus().getId().equals(StatusEnum.AGUARDANDO_INICIO.getValue())) {
-                    trajeto.setLatitudeInicial(localizacao.getLatitude());
-                    trajeto.setLongitudeInicial(localizacao.getLongitude());
-                    newUsuarioLocalizacao.setStatus(new Status(StatusEnum.ANDANDO.getValue()));
-                } else {
-                    //TODO alterar para finalizado
-                    newUsuarioLocalizacao.setStatus(new Status(StatusEnum.PARADO.getValue()));
-                }
-                newUsuarioLocalizacao.setTrajeto(trajeto);
-                // rota(newUsuarioLocalizacao);
-                try {
-                    sendNewLocation(newUsuarioLocalizacao);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-
-                */
                 return false;
             }
         });
@@ -172,7 +143,7 @@ public class RotaFragment extends SupportMapFragment implements OnMapReadyCallba
         mMap.setMapType(GoogleMap.MAP_TYPE_SATELLITE);
 
         if (usuarioLocalizacao != null) {
-            rota(usuarioLocalizacao);
+            //  rota(usuarioLocalizacao);
         } else {
             Toast.makeText(getActivity(), "Erro ao buscar a rota", Toast.LENGTH_SHORT).show();
         }
@@ -190,14 +161,18 @@ public class RotaFragment extends SupportMapFragment implements OnMapReadyCallba
         mostrarSensores();
 
         String topic = "ivan.rodrigues@lsdi.ufma.br/Location";
+        customTopic = "ivan.rodrigues@lsdi.ufma.br/LocationCustom";
         //publicar dado de contexto
 
         //iniciar sensores
-        sensorList = Arrays.asList("Location", "BMI160 Accelerometer");
-        //  sensorList = Arrays.asList("K2HH Acceleration");
+        List<String> sensorList = Arrays.asList("Location", "3-axis Accelerometer");
+        //  sensorList = Arrays.asList("BMI160 Accelerometer"); IVAN's sensor
         startSensores(sensorList);
 
         //
+
+        subscrever();
+
         subDois(topic);
     }
 
@@ -206,7 +181,7 @@ public class RotaFragment extends SupportMapFragment implements OnMapReadyCallba
 
         config = CDDLConfig.builder()
                 //.host(Host.of("tcp://lsdi.ufma.br:1883"))
-                .host(Host.of("tcp://192.168.100.4:1883"))
+                .host(Host.of("tcp://iot.eclipse.org:1883"))
                 //.host(Host.of("tcp://localhost:1883"))
                 .clientId(ClientId.of(clientId))
                 .build();
@@ -242,6 +217,7 @@ public class RotaFragment extends SupportMapFragment implements OnMapReadyCallba
                 Log.d("PUBLISHER", "Falha ao conectar");
             }
         });
+
         pub.connect();
     }
 
@@ -255,10 +231,11 @@ public class RotaFragment extends SupportMapFragment implements OnMapReadyCallba
 
     //subscreve em um topico
     public void subscrever() {
-        //String sql = "select * from ContextMessage";
+        String sql = "select * from ContextMessage where serviceName = '3-axis Accelerometer'";
         String epl = "select avg(sensorValue[0]*sensorValue[0]+sensorValue[1]*sensorValue[1]+sensorValue[2]*sensorValue[2]) as valor1 " +
                 "from ContextMessage.win:time_batch(2sec) " +
-                "where serviceName = 'BMI160 Accelerometer'";
+                //"where serviceName = 'BMI160 Accelerometer'";
+                "where serviceName = '3-axis Accelerometer'";
         sub = Subscriber.of(cddl);
         Monitor monitor = Monitor.of(config);
 
@@ -271,13 +248,20 @@ public class RotaFragment extends SupportMapFragment implements OnMapReadyCallba
 
                 Object val1 = (Double) mapEvent.getProperties().get("valor1");
 
-                Log.d("Monitor", gson.toJson(val1));
+                Double valor = (Double) val1;
 
-            }
+                UsuarioLocalizacao userLocation = new UsuarioLocalizacao();
+                userLocation.setLocalizacao(localizacao);
+                userLocation.setTrajeto(usuarioLocalizacao.getTrajeto());
 
-            @Override
-            public void messageArrived(ContextMessage contextMessage) {
-                Log.d("Monitor", gson.toJson(contextMessage));
+                if (valor <= Double.valueOf(105.99)) {
+                    userLocation.setStatus(new Status(StatusEnum.PARADO.getValue()));
+                } else if (valor > Double.valueOf(105.99) && valor <= Double.valueOf(135.99)) {
+                    userLocation.setStatus(new Status(StatusEnum.ANDANDO.getValue()));
+                } else {
+                    userLocation.setStatus(new Status(StatusEnum.CORRENDO.getValue()));
+                }
+                publicarCustom(usuarioLocalizacao);
             }
 
             @Override
@@ -306,6 +290,45 @@ public class RotaFragment extends SupportMapFragment implements OnMapReadyCallba
         sub.connect();
     }
 
+
+    private void publicarCustom(UsuarioLocalizacao usuarioLocalizacao) {
+
+        ContextMessage contextMessage =
+                new ContextMessage("UsuarioLocalizacao", "UsuarioLocalizacao", gson.toJson(usuarioLocalizacao));
+
+        publicador = Publisher.of(cddl);
+        publicador.setCallback(new Callback() {
+            @Override
+            public void onConnectSuccess() {
+                publicador.publish(contextMessage);
+            }
+        });
+
+        publicador.connect();
+
+    }
+
+
+    private void setMyLocation() {
+        if (!mMap.isMyLocationEnabled()) {
+            if (ActivityCompat.checkSelfPermission(getActivity(), Manifest.permission.ACCESS_FINE_LOCATION)
+                    != PackageManager.PERMISSION_GRANTED &&
+                    ActivityCompat.checkSelfPermission(getActivity(), Manifest.permission.ACCESS_COARSE_LOCATION)
+                            != PackageManager.PERMISSION_GRANTED) {
+                // TODO: Consider calling
+                //    ActivityCompat#requestPermissions
+                // here to request the missing permissions, and then overriding
+                //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                //                                          int[] grantResults)
+                // to handle the case where the user grants the permission. See the documentation
+                // for ActivityCompat#requestPermissions for more details.
+                return;
+            }
+            mMap.setMyLocationEnabled(true);
+
+        }
+    }
+
     //iniciar e finalizar no servidor
     private void sendNewLocation(UsuarioLocalizacao usuarioLocalizacao) throws Exception {
         try {
@@ -319,7 +342,7 @@ public class RotaFragment extends SupportMapFragment implements OnMapReadyCallba
                         user = response.body();
                         if (user.getId() != null) {
                             if (user.getStatus().getId().equals(StatusEnum.ANDANDO.getValue())) {
-                                subscrever();
+                                // subscrever();
                                 changeTitleItemMenu("Finalizar");
                                 Toast.makeText(getActivity(), "Iniciando", Toast.LENGTH_SHORT).show();
                             } else {
@@ -348,13 +371,14 @@ public class RotaFragment extends SupportMapFragment implements OnMapReadyCallba
         if (cddl != null) cddl.stopScan();
         if (pub != null) pub.disconnect();
         if (sub != null) sub.disconnect();
+        if (subscriber != null) subscriber.disconnect();
         super.onDestroy();
     }
 
     private void subDois(String topic) {
 
-        sub = Subscriber.of(cddl);
-        sub.setCallback(new Callback() {
+        subscriber = Subscriber.of(cddl);
+        subscriber.setCallback(new Callback() {
             @Override
             public void messageArrived(ContextMessage contextMessage) {
                 Gson gson = new Gson();
@@ -364,6 +388,12 @@ public class RotaFragment extends SupportMapFragment implements OnMapReadyCallba
                     localizacao.setLatitude(sensorData.getSensorValue()[0]);
                     localizacao.setLongitude(sensorData.getSensorValue()[1]);
                     localizacao.setData(DateUtil.toDate(new Date(), DateUtil.DATA_SEPARADO_POR_TRACO_AMERICANO));
+
+                    if (localizacaoAnterior.getLatitude() == null) {
+                        localizacaoAnterior.setLatitude(sensorData.getSensorValue()[0]);
+                        localizacaoAnterior.setLongitude(sensorData.getSensorValue()[1]);
+                    }
+
                     origem = new LatLng(localizacao.getLatitude(), localizacao.getLongitude());
                     if (ActivityCompat.checkSelfPermission(getActivity(), Manifest.permission.ACCESS_FINE_LOCATION)
                             != PackageManager.PERMISSION_GRANTED &&
@@ -378,7 +408,7 @@ public class RotaFragment extends SupportMapFragment implements OnMapReadyCallba
 
             @Override
             public void onConnectSuccess() {
-                sub.subscribe(Topic.of(topic));
+                subscriber.subscribe(Topic.of(topic));
                 Log.d("subscriber", "Conectado com sucesso");
             }
 
@@ -403,7 +433,7 @@ public class RotaFragment extends SupportMapFragment implements OnMapReadyCallba
             }
         });
 
-        sub.connect();
+        subscriber.connect();
 
     }
 
