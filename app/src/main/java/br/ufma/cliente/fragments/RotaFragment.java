@@ -96,7 +96,7 @@ public class RotaFragment extends Fragment implements OnMapReadyCallback {
     private UsuarioLocalizacao usuarioLocalizacao;
 
     private Localizacao localizacao;
-    private Localizacao localizacaoAnterior;
+
 
     private String customTopic;
 
@@ -129,7 +129,6 @@ public class RotaFragment extends Fragment implements OnMapReadyCallback {
         context = getActivity();
         Bundle bundle = getArguments();
         localizacao = new Localizacao();
-        localizacaoAnterior = new Localizacao();
         usuarioLocalizacao = (UsuarioLocalizacao) bundle.getSerializable("usuarioLocalizacao");
         changeTitleItemMenu("Iniciar");
         MainActivity.menuItem.setOnMenuItemClickListener(new MenuItem.OnMenuItemClickListener() {
@@ -151,7 +150,7 @@ public class RotaFragment extends Fragment implements OnMapReadyCallback {
         mMap.setMapType(GoogleMap.MAP_TYPE_SATELLITE);
 
         if (usuarioLocalizacao != null) {
-            //  rota(usuarioLocalizacao);
+            rota(usuarioLocalizacao);
         } else {
             Toast.makeText(getActivity(), "Erro ao buscar a rota", Toast.LENGTH_SHORT).show();
         }
@@ -239,11 +238,12 @@ public class RotaFragment extends Fragment implements OnMapReadyCallback {
 
     //subscreve em um topico
     public void subscrever() {
-        String sql = "select * from ContextMessage where serviceName = '3-axis Accelerometer'";
+
         String epl = "select avg(sensorValue[0]*sensorValue[0]+sensorValue[1]*sensorValue[1]+sensorValue[2]*sensorValue[2]) as valor1 " +
                 "from ContextMessage.win:time_batch(2sec) " +
                 //"where serviceName = 'BMI160 Accelerometer'";
                 "where serviceName = '3-axis Accelerometer'";
+
         sub = Subscriber.of(cddl);
         Monitor monitor = Monitor.of(config);
 
@@ -269,7 +269,8 @@ public class RotaFragment extends Fragment implements OnMapReadyCallback {
                 } else {
                     userLocation.setStatus(new Status(StatusEnum.CORRENDO.getValue()));
                 }
-                publicarCustom(usuarioLocalizacao);
+                publicarCustom(userLocation);
+                setMarker(userLocation);
             }
 
             @Override
@@ -298,6 +299,13 @@ public class RotaFragment extends Fragment implements OnMapReadyCallback {
         sub.connect();
     }
 
+    public void setMarker(UsuarioLocalizacao user) {
+        LatLng now = new LatLng(user.getLocalizacao().getLatitude(), user.getLocalizacao().getLongitude());
+        mMap.addMarker(new MarkerOptions()
+                .position(now)
+                .title("Movimentando"));
+        mMap.moveCamera(CameraUpdateFactory.newLatLng(now));
+    }
 
     private void publicarCustom(UsuarioLocalizacao usuarioLocalizacao) {
 
@@ -306,7 +314,7 @@ public class RotaFragment extends Fragment implements OnMapReadyCallback {
             gson = new Gson();
 
             ContextMessage contextMessage =
-                    new ContextMessage("String", "UsuarioLocalizacao",
+                    new ContextMessage("String", "UsuarioLocalizacao" + usuarioLocalizacao.getTrajeto().getId(),
                             gson.toJson(usuarioLocalizacao));
 
             publicador.setCallback(new Callback() {
@@ -411,18 +419,8 @@ public class RotaFragment extends Fragment implements OnMapReadyCallback {
                     localizacao.setLongitude(sensorData.getSensorValue()[1]);
                     localizacao.setData(DateUtil.toDate(new Date(), DateUtil.DATA_SEPARADO_POR_TRACO_AMERICANO));
 
-                    if (localizacaoAnterior.getLatitude() == null) {
-                        localizacaoAnterior.setLatitude(sensorData.getSensorValue()[0]);
-                        localizacaoAnterior.setLongitude(sensorData.getSensorValue()[1]);
-                    }
-
                     origem = new LatLng(localizacao.getLatitude(), localizacao.getLongitude());
-                    if (ActivityCompat.checkSelfPermission(getActivity(), Manifest.permission.ACCESS_FINE_LOCATION)
-                            != PackageManager.PERMISSION_GRANTED &&
-                            ActivityCompat.checkSelfPermission(getActivity(), Manifest.permission.ACCESS_COARSE_LOCATION)
-                                    != PackageManager.PERMISSION_GRANTED) {
-                        return;
-                    }
+
                     MainActivity.menuItem.setVisible(true);
                     //mMap.setMyLocationEnabled(true);
                 }
