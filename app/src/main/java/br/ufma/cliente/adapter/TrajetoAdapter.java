@@ -67,9 +67,9 @@ public class TrajetoAdapter extends RecyclerView.Adapter<TrajetoAdapter.TrajetoV
         holder.relativeLayout.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if(usuarioLocalizacaos.get(position).getStatus().getId().equals(StatusEnum.AGUARDANDO_INICIO.getValue())){
+                //if(usuarioLocalizacaos.get(position).getStatus().getId().equals(StatusEnum.AGUARDANDO_INICIO.getValue())){
                     onUpdateListener.onUpdate(usuarioLocalizacaos.get(position));
-                }
+               // }
             }
         });
 

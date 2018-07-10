@@ -131,7 +131,6 @@ public class LoginActivity extends AppCompatActivity {
                     Usuario user = response.body();
                     if (user != null) {
                         if (user.getId() != null) {
-
                             Toast.makeText(getApplicationContext(), "Usuario Salvo com Sucesso", Toast.LENGTH_SHORT).show();
                             ObjectMapper mapper = new ObjectMapper();
                             String objeto = null;
@@ -141,12 +140,10 @@ public class LoginActivity extends AppCompatActivity {
                                 e.printStackTrace();
                             }
                             Intent intent = new Intent(getApplicationContext(), MainActivity.class);
-
                             SharedPreferences.Editor preEditor = sharedPreferences.edit();
                             preEditor.putString("usuario", objeto);
                             preEditor.putBoolean("IsLoggedIn", true);
                             preEditor.commit();
-
                             startActivity(intent);
                             finish();
                         }

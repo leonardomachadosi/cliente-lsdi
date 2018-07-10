@@ -186,7 +186,7 @@ public class MapsFragment extends Fragment implements OnMapReadyCallback, Google
         //mostrando sensores internos
         mostrarSensores();
 
-        //subscrever tópico
+        //sobrescrever tópico
         subscrever("ivan.rodrigues@lsdi.ufma.br/Location");
         // subscreverAcellerometro("ivan.rodrigues@lsdi.ufma.br/BMI160 Accelerometer");
 
@@ -205,7 +205,7 @@ public class MapsFragment extends Fragment implements OnMapReadyCallback, Google
         mMap.getUiSettings().setZoomControlsEnabled(true);
         // Add a marker in Sydney and move the camera
         //origem = new LatLng(-2.5497997, -44.2538819);
-        mMap.setMapType(GoogleMap.MAP_TYPE_NORMAL);
+        mMap.setMapType(GoogleMap.MAP_TYPE_SATELLITE);
 
 
     }
@@ -275,6 +275,7 @@ public class MapsFragment extends Fragment implements OnMapReadyCallback, Google
     public void iniciarCDDL(Context context) {
 
         config = CDDLConfig.builder()
+                //.host(Host.of("tcp://iot.eclipse.org:1883"))
                 .host(Host.of("tcp://lsdi.ufma.br:1883"))
                 .clientId(ClientId.of(clientId))
                 .build();

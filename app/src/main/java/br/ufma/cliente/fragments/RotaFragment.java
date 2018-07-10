@@ -1,13 +1,10 @@
 package br.ufma.cliente.fragments;
 
-import android.Manifest;
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
-import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.Fragment;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -36,7 +33,6 @@ import com.google.gson.Gson;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 
@@ -47,6 +43,8 @@ import br.ufma.cliente.domain.model.Localizacao;
 import br.ufma.cliente.domain.model.Status;
 import br.ufma.cliente.domain.model.Trajeto;
 import br.ufma.cliente.domain.model.UsuarioLocalizacao;
+import br.ufma.cliente.domain.model.auxiliary.Parado;
+import br.ufma.cliente.domain.model.auxiliary.Resultado;
 import br.ufma.cliente.retrofit.RetrofitInicializador;
 import br.ufma.cliente.util.DateUtil;
 import br.ufma.lsdi.cddl.CDDL;
@@ -59,7 +57,6 @@ import br.ufma.lsdi.cddl.message.ContextMessage;
 import br.ufma.lsdi.cddl.message.MOUUID;
 import br.ufma.lsdi.cddl.message.MapEvent;
 import br.ufma.lsdi.cddl.message.MonitorToken;
-import br.ufma.lsdi.cddl.message.QueryResponseMessage;
 import br.ufma.lsdi.cddl.message.SensorData;
 import br.ufma.lsdi.cddl.message.ServiceList;
 import br.ufma.lsdi.cddl.message.TechnologyID;
@@ -68,7 +65,6 @@ import br.ufma.lsdi.cddl.type.CEPRule;
 import br.ufma.lsdi.cddl.type.ClientId;
 import br.ufma.lsdi.cddl.type.Host;
 import br.ufma.lsdi.cddl.type.Topic;
-import butterknife.ButterKnife;
 import retrofit2.Call;
 import retrofit2.Response;
 
@@ -96,6 +92,7 @@ public class RotaFragment extends Fragment implements OnMapReadyCallback {
     private UsuarioLocalizacao usuarioLocalizacao;
 
     private Localizacao localizacao;
+    private Resultado resultado;
 
 
     private String customTopic;
@@ -129,11 +126,23 @@ public class RotaFragment extends Fragment implements OnMapReadyCallback {
         context = getActivity();
         Bundle bundle = getArguments();
         localizacao = new Localizacao();
+        resultado = new Resultado();
         usuarioLocalizacao = (UsuarioLocalizacao) bundle.getSerializable("usuarioLocalizacao");
-        changeTitleItemMenu("Iniciar");
+        changeTitleItemMenu("Finalizar");
         MainActivity.menuItem.setOnMenuItemClickListener(new MenuItem.OnMenuItemClickListener() {
             @Override
             public boolean onMenuItemClick(MenuItem item) {
+                try {
+                    publicarFim();
+                    UsuarioLocalizacao mUsuarioLocalizacao = new UsuarioLocalizacao();
+                    mUsuarioLocalizacao.setTrajeto(usuarioLocalizacao.getTrajeto());
+                    mUsuarioLocalizacao.setStatus(new Status(StatusEnum.FINALIZADO.getValue()));
+                    mUsuarioLocalizacao.setLocalizacao(localizacao);
+                    mUsuarioLocalizacao.setUsuario(usuarioLocalizacao.getTrajeto().getUsuario());
+                    sendUpdateLocationToServer(mUsuarioLocalizacao);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
                 return false;
             }
         });
@@ -150,7 +159,7 @@ public class RotaFragment extends Fragment implements OnMapReadyCallback {
         mMap.setMapType(GoogleMap.MAP_TYPE_SATELLITE);
 
         if (usuarioLocalizacao != null) {
-            rota(usuarioLocalizacao);
+            rota(usuarioLocalizacao, Color.LTGRAY);
         } else {
             Toast.makeText(getActivity(), "Erro ao buscar a rota", Toast.LENGTH_SHORT).show();
         }
@@ -172,15 +181,26 @@ public class RotaFragment extends Fragment implements OnMapReadyCallback {
         //publicar dado de contexto
 
         //iniciar sensores
-        List<String> sensorList = Arrays.asList("Location", "3-axis Accelerometer");
+        List<String> sensorList = Arrays.asList("Location", "BMI160 Accelerometer");
+        //List<String> sensorList = Arrays.asList("Location", "BMI160 Accelerometer");
         //  sensorList = Arrays.asList("BMI160 Accelerometer"); IVAN's sensor
-        startSensores(sensorList);
+        if (usuarioLocalizacao.getStatus().getId().equals(StatusEnum.AGUARDANDO_INICIO.getValue())) {
 
-        //
+            startSensores(sensorList);
+            subscrever();
 
-        subscrever();
+            subDois(topic);
+        } else {
+            try {
+                if (mMap != null) {
+                    mMap.clear();
+                }
+                getStatusUsuario(usuarioLocalizacao);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
 
-        subDois(topic);
+        }
     }
 
     //iniciando CDDL
@@ -188,8 +208,6 @@ public class RotaFragment extends Fragment implements OnMapReadyCallback {
 
         config = CDDLConfig.builder()
                 .host(Host.of("tcp://lsdi.ufma.br:1883"))
-                //.host(Host.of("tcp://iot.eclipse.org:1883"))
-                //.host(Host.of("tcp://localhost:1883"))
                 .clientId(ClientId.of(clientId))
                 .build();
 
@@ -241,8 +259,8 @@ public class RotaFragment extends Fragment implements OnMapReadyCallback {
 
         String epl = "select avg(sensorValue[0]*sensorValue[0]+sensorValue[1]*sensorValue[1]+sensorValue[2]*sensorValue[2]) as valor1 " +
                 "from ContextMessage.win:time_batch(2sec) " +
-                //"where serviceName = 'BMI160 Accelerometer'";
-                "where serviceName = '3-axis Accelerometer'";
+                "where serviceName = 'BMI160 Accelerometer'";
+        //  "where serviceName = '3-axis Accelerometer'";
 
         sub = Subscriber.of(cddl);
         Monitor monitor = Monitor.of(config);
@@ -261,6 +279,9 @@ public class RotaFragment extends Fragment implements OnMapReadyCallback {
                 UsuarioLocalizacao userLocation = new UsuarioLocalizacao();
                 userLocation.setLocalizacao(localizacao);
                 userLocation.setTrajeto(usuarioLocalizacao.getTrajeto());
+                userLocation.setData(DateUtil.toDate(new Date(), DateUtil.DATA_SEPARADO_POR_TRACO_AMERICANO));
+                userLocation.setUsuario(usuarioLocalizacao.getTrajeto().getUsuario());
+                userLocation.setMedia(valor);
 
                 if (valor <= Double.valueOf(105.99)) {
                     userLocation.setStatus(new Status(StatusEnum.PARADO.getValue()));
@@ -269,8 +290,16 @@ public class RotaFragment extends Fragment implements OnMapReadyCallback {
                 } else {
                     userLocation.setStatus(new Status(StatusEnum.CORRENDO.getValue()));
                 }
+
+                // usuarioLocalizacaos.add(userLocation);
                 publicarCustom(userLocation);
                 setMarker(userLocation);
+
+                try {
+                    sendUpdateLocationToServer(userLocation);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
             }
 
             @Override
@@ -303,7 +332,15 @@ public class RotaFragment extends Fragment implements OnMapReadyCallback {
         LatLng now = new LatLng(user.getLocalizacao().getLatitude(), user.getLocalizacao().getLongitude());
         mMap.addMarker(new MarkerOptions()
                 .position(now)
-                .title("Movimentando"));
+                .title("Movimentando" + user.getStatus().getId()));
+        mMap.moveCamera(CameraUpdateFactory.newLatLng(now));
+    }
+
+    public void setCustomMarker(Parado parado) {
+        LatLng now = new LatLng(parado.getLatitude(), parado.getLongitude());
+        mMap.addMarker(new MarkerOptions()
+                .position(now)
+                .title("Tempo Parado: " + parado.getSegundo() + " segundos"));
         mMap.moveCamera(CameraUpdateFactory.newLatLng(now));
     }
 
@@ -342,46 +379,39 @@ public class RotaFragment extends Fragment implements OnMapReadyCallback {
 
     }
 
+    public void changeTitleItemMenu(String title) {
+        MainActivity.menuItem.setTitle(title);
+    }
 
-    private void setMyLocation() {
-        if (!mMap.isMyLocationEnabled()) {
-            if (ActivityCompat.checkSelfPermission(getActivity(), Manifest.permission.ACCESS_FINE_LOCATION)
-                    != PackageManager.PERMISSION_GRANTED &&
-                    ActivityCompat.checkSelfPermission(getActivity(), Manifest.permission.ACCESS_COARSE_LOCATION)
-                            != PackageManager.PERMISSION_GRANTED) {
-                // TODO: Consider calling
-                //    ActivityCompat#requestPermissions
-                // here to request the missing permissions, and then overriding
-                //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-                //                                          int[] grantResults)
-                // to handle the case where the user grants the permission. See the documentation
-                // for ActivityCompat#requestPermissions for more details.
-                return;
-            }
-            mMap.setMyLocationEnabled(true);
-
+    public void stopSensor() {
+        if(cddl != null){
+            cddl.stopScan();
+        }
+        if(sub != null){
+            sub.disconnect();
+        }
+        if(pub != null){
+            pub.disconnect();
         }
     }
 
-    //iniciar e finalizar no servidor
-    private void sendNewLocation(UsuarioLocalizacao usuarioLocalizacao) throws Exception {
-        try {
+    public void sendUpdateLocationToServer(UsuarioLocalizacao userLocation) throws Exception {
 
-            Call<UsuarioLocalizacao> call = new RetrofitInicializador().salvarTrajeto().salvarTrajeto(usuarioLocalizacao);
+        gson = new Gson();
+        Log.d("obj", gson.toJson(userLocation));
+        try {
+            Call<UsuarioLocalizacao> call = new RetrofitInicializador().salvarTrajeto().salvarTrajeto(userLocation);
             call.enqueue(new retrofit2.Callback<UsuarioLocalizacao>() {
                 @Override
                 public void onResponse(Call<UsuarioLocalizacao> call, Response<UsuarioLocalizacao> response) {
                     if (response.body() != null) {
-                        UsuarioLocalizacao user = new UsuarioLocalizacao();
-                        user = response.body();
-                        if (user.getId() != null) {
-                            if (user.getStatus().getId().equals(StatusEnum.ANDANDO.getValue())) {
-                                // subscrever();
-                                changeTitleItemMenu("Finalizar");
-                                Toast.makeText(getActivity(), "Iniciando", Toast.LENGTH_SHORT).show();
-                            } else {
-                                stopSensor();
-                                Toast.makeText(getActivity(), "Finalizado", Toast.LENGTH_SHORT).show();
+                        usuarioLocalizacao = response.body();
+                        if (usuarioLocalizacao.getStatus().getId().equals(StatusEnum.FINALIZADO.getValue())) {
+                            Toast.makeText(getActivity().getApplicationContext(), "Finalizado com sucesso.", Toast.LENGTH_SHORT).show();
+                            try {
+                                getStatusUsuario(usuarioLocalizacao);
+                            } catch (Exception e) {
+                                e.printStackTrace();
                             }
                         }
                     }
@@ -392,17 +422,10 @@ public class RotaFragment extends Fragment implements OnMapReadyCallback {
                     t.printStackTrace();
                 }
             });
+
         } catch (Exception e) {
             e.printStackTrace();
         }
-    }
-
-    public void changeTitleItemMenu(String title) {
-        MainActivity.menuItem.setTitle(title);
-    }
-
-    public void stopSensor() {
-
     }
 
     private void subDois(String topic) {
@@ -415,11 +438,10 @@ public class RotaFragment extends Fragment implements OnMapReadyCallback {
                 Log.d("subscriber", gson.toJson(contextMessage));
                 SensorData sensorData = gson.fromJson(contextMessage.getBody(), SensorData.class);
                 if (sensorData.getSensorName().equals("Location")) {
+                    localizacao = new Localizacao();
                     localizacao.setLatitude(sensorData.getSensorValue()[0]);
                     localizacao.setLongitude(sensorData.getSensorValue()[1]);
                     localizacao.setData(DateUtil.toDate(new Date(), DateUtil.DATA_SEPARADO_POR_TRACO_AMERICANO));
-
-                    origem = new LatLng(localizacao.getLatitude(), localizacao.getLongitude());
 
                     MainActivity.menuItem.setVisible(true);
                     //mMap.setMyLocationEnabled(true);
@@ -457,7 +479,7 @@ public class RotaFragment extends Fragment implements OnMapReadyCallback {
 
     }
 
-    private void rota(UsuarioLocalizacao usuarioLocalizacao) {
+    private void rota(UsuarioLocalizacao usuarioLocalizacao, int color) {
         GoogleDirection.withServerKey(GOOGLE_KEY_DIRECTIONS)
                 .from(new LatLng(usuarioLocalizacao.getTrajeto().getLatitudeInicial(), usuarioLocalizacao.getTrajeto().getLongitudeInicial()))
                 .to(new LatLng(usuarioLocalizacao.getTrajeto().getLatitudeFinal(), usuarioLocalizacao.getTrajeto().getLongitudeFinal()))
@@ -468,18 +490,17 @@ public class RotaFragment extends Fragment implements OnMapReadyCallback {
                     public void onDirectionSuccess(Direction direction, String rawBody) {
                         if (direction.isOK()) {
                             // Do something
-                            mMap.clear();
                             Route route = direction.getRouteList().get(0);
                             int legCount = route.getLegList().size();
                             for (int index = 0; index < legCount; index++) {
                                 Leg leg = route.getLegList().get(index);
-                                mMap.addMarker(new MarkerOptions().position(leg.getStartLocation().getCoordination()).title(leg.getStartAddress()));
+                                //mMap.addMarker(new MarkerOptions().position(leg.getStartLocation().getCoordination()).title(leg.getStartAddress()));
                                 if (index == legCount - 1) {
-                                    mMap.addMarker(new MarkerOptions().position(leg.getEndLocation().getCoordination()).title(leg.getEndAddress()));
+                                   // mMap.addMarker(new MarkerOptions().position(leg.getEndLocation().getCoordination()).title(leg.getEndAddress()));
                                 }
                                 List<Step> stepList = leg.getStepList();
                                 ArrayList<PolylineOptions> polylineOptionList = DirectionConverter.createTransitPolyline(getActivity(),
-                                        stepList, 5, Color.LTGRAY, 3, Color.BLUE);
+                                        stepList, 5, color, 3, Color.BLUE);
                                 for (PolylineOptions polylineOption : polylineOptionList) {
                                     mMap.addPolyline(polylineOption);
                                 }
@@ -520,4 +541,94 @@ public class RotaFragment extends Fragment implements OnMapReadyCallback {
         mMap.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 100));
     }
 
+    private void getStatusUsuario(UsuarioLocalizacao usuarioLocalizacao) throws Exception {
+        try {
+            Call<Resultado> call = new RetrofitInicializador().getStatusUsuario().getStatusUsuario(new Resultado(usuarioLocalizacao.getTrajeto().getId()));
+            call.enqueue(new retrofit2.Callback<Resultado>() {
+                @Override
+                public void onResponse(Call<Resultado> call, Response<Resultado> response) {
+
+                    if (response.body() != null) {
+                        resultado = response.body();
+
+                        if (resultado.getAndando() != null) {
+                            //TRAJETO PERCORRIDO ANDANDO
+                            Trajeto trajetoAndando = new Trajeto();
+                            UsuarioLocalizacao userAndando = new UsuarioLocalizacao();
+                            trajetoAndando.setLatitudeInicial(resultado.getAndando().getLatideInicial());
+                            trajetoAndando.setLongitudeInicial(resultado.getAndando().getLongitudeInicial());
+                            trajetoAndando.setLatitudeFinal(resultado.getAndando().getLatitudeFinal());
+                            trajetoAndando.setLongitudeFinal(resultado.getAndando().getLongitudeFinal());
+                            userAndando.setTrajeto(trajetoAndando);
+                            rota(userAndando, Color.BLUE);
+                        }
+
+                        if (resultado.getCorrendo() != null) {
+
+                            //TRAJETO PERCORRIDO CORRENDO
+                            Trajeto trajetoCorrendo = new Trajeto();
+                            UsuarioLocalizacao userCorrendo = new UsuarioLocalizacao();
+                            trajetoCorrendo.setLatitudeInicial(resultado.getCorrendo().getLatideInicial());
+                            trajetoCorrendo.setLongitudeInicial(resultado.getCorrendo().getLongitudeInicial());
+                            trajetoCorrendo.setLatitudeFinal(resultado.getCorrendo().getLatitudeFinal());
+                            trajetoCorrendo.setLongitudeFinal(resultado.getCorrendo().getLongitudeFinal());
+                            userCorrendo.setTrajeto(trajetoCorrendo);
+                            rota(userCorrendo, Color.GREEN);
+                        }
+
+                        if (resultado.getParados() != null && !resultado.getParados().isEmpty()) {
+                            //PONTOS NO QUAL O USUÁRIO FICOU PARADO
+                            for (Parado parado : resultado.getParados()) {
+                                setCustomMarker(parado);
+
+                            }
+                        }
+
+
+                    }
+
+                }
+
+                @Override
+                public void onFailure(Call<Resultado> call, Throwable t) {
+                    t.printStackTrace();
+                }
+            });
+
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+    }
+    private void publicarFim() {
+        Publisher publicadorFim = Publisher.of(cddl);
+        publicadorFim.setCallback(new Callback() {
+            @Override
+            public void onConnectSuccess() {
+                publicadorFim.publish(new ContextMessage
+                        ("String",
+                                "Fim"+usuarioLocalizacao.getTrajeto().getId(),
+                                "fim do trajeto"));
+            }
+
+            @Override
+            public void onConnectFailure(Throwable exception) {
+
+            }
+
+            @Override
+            public void onSubscribeFailure(Throwable cause) {
+
+            }
+
+            @Override
+            public void onPublishSuccess(Topic topic) {
+                mMap.clear();
+                stopSensor();
+            }
+        });
+        publicadorFim.connect();
+
+    }
 }

@@ -4,13 +4,12 @@ package br.ufma.cliente.retrofit;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
+import br.ufma.cliente.service.ResultadoService;
 import br.ufma.cliente.service.TipoUsuarioService;
-import br.ufma.cliente.service.TrajetoService;
 import br.ufma.cliente.service.UsuarioLocalizacaoService;
 import br.ufma.cliente.service.UsuarioService;
 import retrofit2.Retrofit;
 import retrofit2.converter.gson.GsonConverterFactory;
-import retrofit2.converter.jackson.JacksonConverterFactory;
 
 public class RetrofitInicializador {
     private Retrofit retrofit;
@@ -47,5 +46,9 @@ public class RetrofitInicializador {
 
     public UsuarioLocalizacaoService salvarTrajeto() {
         return retrofit.create(UsuarioLocalizacaoService.class);
+    }
+
+    public ResultadoService getStatusUsuario() {
+        return retrofit.create(ResultadoService.class);
     }
 }

@@ -9,15 +9,12 @@ public class UsuarioLocalizacao implements Serializable {
     private static final long serialVersionUID = 1L;
 
     private Long id;
-
     private String data;
-
     private Localizacao localizacao;
-
     private Usuario usuario;
     private Trajeto trajeto;
-
     private Status status;
+    private Double media;
 
     public UsuarioLocalizacao(String data, Localizacao localizacao, Usuario usuario, Trajeto trajeto, Status status) {
         this.data = data;
@@ -80,5 +77,13 @@ public class UsuarioLocalizacao implements Serializable {
 
     public void setStatus(Status status) {
         this.status = status;
+    }
+
+    public Double getMedia() {
+        return media;
+    }
+
+    public void setMedia(Double media) {
+        this.media = media;
     }
 }

@@ -5,7 +5,8 @@ public enum StatusEnum {
     AGUARDANDO_INICIO(1L),
     ANDANDO(2L),
     CORRENDO(3L),
-    PARADO(4L);
+    PARADO(4L),
+    FINALIZADO(5L);
 
     private Long value;
 

@@ -20,7 +20,6 @@ import java.util.List;
 import br.ufma.cliente.R;
 import br.ufma.cliente.activity.MainActivity;
 import br.ufma.cliente.adapter.TrajetoAdapter;
-import br.ufma.cliente.domain.model.Trajeto;
 import br.ufma.cliente.domain.model.Usuario;
 import br.ufma.cliente.domain.model.UsuarioLocalizacao;
 import br.ufma.cliente.retrofit.RetrofitInicializador;
@@ -74,8 +73,6 @@ public class TrajetoFragment extends Fragment {
     public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_trajeto, container, false);
         ButterKnife.bind(this, view);
-        // presos = new ArrayList<Preso>();
-        //presos = (List<Preso>) bundle.getSerializable("presos");
         usuarioLocalizacaos = new ArrayList<UsuarioLocalizacao>();
         mRecyclerView = (RecyclerView) view.findViewById(R.id.rv_trajeto);
         mLayoutManager = new LinearLayoutManager(context);
