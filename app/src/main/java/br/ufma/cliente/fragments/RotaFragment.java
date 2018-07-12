@@ -181,7 +181,7 @@ public class RotaFragment extends Fragment implements OnMapReadyCallback {
         //publicar dado de contexto
 
         //iniciar sensores
-        List<String> sensorList = Arrays.asList("Location", "BMI160 Accelerometer");
+        List<String> sensorList = Arrays.asList("Location", "K6DS3TR Accelerometer");
         //List<String> sensorList = Arrays.asList("Location", "BMI160 Accelerometer");
         //  sensorList = Arrays.asList("BMI160 Accelerometer"); IVAN's sensor
         if (usuarioLocalizacao.getStatus().getId().equals(StatusEnum.AGUARDANDO_INICIO.getValue())) {
@@ -207,7 +207,8 @@ public class RotaFragment extends Fragment implements OnMapReadyCallback {
     public void iniciarCDDL(Context context) {
 
         config = CDDLConfig.builder()
-                .host(Host.of("tcp://lsdi.ufma.br:1883"))
+                .host(Host.of("tcp://iot.eclipse.org:1883"))
+               // .host(Host.of("tcp://lsdi.ufma.br:1883"))
                 .clientId(ClientId.of(clientId))
                 .build();
 
@@ -259,8 +260,8 @@ public class RotaFragment extends Fragment implements OnMapReadyCallback {
 
         String epl = "select avg(sensorValue[0]*sensorValue[0]+sensorValue[1]*sensorValue[1]+sensorValue[2]*sensorValue[2]) as valor1 " +
                 "from ContextMessage.win:time_batch(2sec) " +
-                "where serviceName = 'BMI160 Accelerometer'";
-        //  "where serviceName = '3-axis Accelerometer'";
+                "where serviceName = 'K6DS3TR Accelerometer'";
+        //  "where serviceName = 'K6DS3TR Accelerometer'";
 
         sub = Subscriber.of(cddl);
         Monitor monitor = Monitor.of(config);
@@ -283,9 +284,9 @@ public class RotaFragment extends Fragment implements OnMapReadyCallback {
                 userLocation.setUsuario(usuarioLocalizacao.getTrajeto().getUsuario());
                 userLocation.setMedia(valor);
 
-                if (valor <= Double.valueOf(105.99)) {
+                if (valor <= Double.valueOf(100.01)) {
                     userLocation.setStatus(new Status(StatusEnum.PARADO.getValue()));
-                } else if (valor > Double.valueOf(105.99) && valor <= Double.valueOf(135.99)) {
+                } else if (valor > Double.valueOf(100.01) && valor <= Double.valueOf(135.99)) {
                     userLocation.setStatus(new Status(StatusEnum.ANDANDO.getValue()));
                 } else {
                     userLocation.setStatus(new Status(StatusEnum.CORRENDO.getValue()));
@@ -525,13 +526,13 @@ public class RotaFragment extends Fragment implements OnMapReadyCallback {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        stopSensor();
+     //   stopSensor();
     }
 
     @Override
     public void onPause() {
         super.onPause();
-        stopSensor();
+        //stopSensor();
     }
 
     private void setCameraWithCoordinationBounds(Route route) {
@@ -602,33 +603,7 @@ public class RotaFragment extends Fragment implements OnMapReadyCallback {
 
     }
     private void publicarFim() {
-        Publisher publicadorFim = Publisher.of(cddl);
-        publicadorFim.setCallback(new Callback() {
-            @Override
-            public void onConnectSuccess() {
-                publicadorFim.publish(new ContextMessage
-                        ("String",
-                                "Fim"+usuarioLocalizacao.getTrajeto().getId(),
-                                "fim do trajeto"));
-            }
-
-            @Override
-            public void onConnectFailure(Throwable exception) {
-
-            }
-
-            @Override
-            public void onSubscribeFailure(Throwable cause) {
-
-            }
-
-            @Override
-            public void onPublishSuccess(Topic topic) {
-                mMap.clear();
-                stopSensor();
-            }
-        });
-        publicadorFim.connect();
-
+        mMap.clear();
+        stopSensor();
     }
 }

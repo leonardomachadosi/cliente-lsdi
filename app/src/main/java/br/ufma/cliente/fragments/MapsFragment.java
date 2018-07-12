@@ -275,8 +275,8 @@ public class MapsFragment extends Fragment implements OnMapReadyCallback, Google
     public void iniciarCDDL(Context context) {
 
         config = CDDLConfig.builder()
-                //.host(Host.of("tcp://iot.eclipse.org:1883"))
-                .host(Host.of("tcp://lsdi.ufma.br:1883"))
+                .host(Host.of("tcp://iot.eclipse.org:1883"))
+               // .host(Host.of("tcp://lsdi.ufma.br:1883"))
                 .clientId(ClientId.of(clientId))
                 .build();
 
